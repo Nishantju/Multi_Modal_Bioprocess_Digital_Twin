@@ -9,6 +9,11 @@ from models.integrated_bioreactor import (
     simulate_integrated_bioreactor
 )
 
+from models.multimodal_bioreactor import (
+    simulate_multimodal_bioreactor
+)
+
+
 from control.reduced_order_model import (
     make_population_phases,
     predict_reduced_order
@@ -452,6 +457,63 @@ weight_late_stage_control = st.sidebar.slider(
     0.0, 0.1, 0.02, 0.005
 )
 
+# ==========================================================
+# 13. SIDEBAR: MULTI-MODAL PHYSICAL-FIELD CONTROL
+# ==========================================================
+
+st.sidebar.divider()
+
+st.sidebar.header("🔬 Multi-Modal Physical-Field Control")
+
+st.sidebar.subheader("💡 Optogenetics")
+multimodal_light = st.sidebar.slider(
+    "Multi-modal light intensity",
+    0.0, 200.0, 100.0, 5.0
+)
+
+st.sidebar.subheader("⚡ Electrogenetics")
+
+multimodal_electric = st.sidebar.slider(
+    "Electric field magnitude",
+    0.0, 20.0, 8.0, 0.5
+)
+
+st.sidebar.subheader("🔊 Sonogenetics")
+
+multimodal_ultrasound = st.sidebar.slider(
+    "Ultrasound intensity",
+    0.0, 20.0, 8.0, 0.5
+)
+
+st.sidebar.subheader("🧲 Magnetogenetics")
+
+multimodal_magnetic = st.sidebar.slider(
+    "Magnetic field magnitude",
+    0.0, 20.0, 8.0, 0.5
+)
+
+st.sidebar.subheader("⏱️ Actuator response times")
+
+tau_opto = st.sidebar.slider(
+    "Optogenetic response time (h)",
+    0.1, 5.0, 0.5, 0.1
+)
+
+tau_electro = st.sidebar.slider(
+    "Electrogenetic response time (h)",
+    0.1, 5.0, 0.5, 0.1
+)
+
+tau_sono = st.sidebar.slider(
+    "Sonogenetic response time (h)",
+    0.1, 5.0, 0.5, 0.1
+)
+
+tau_magneto = st.sidebar.slider(
+    "Magnetogenetic response time (h)",
+    0.1, 5.0, 0.5, 0.1
+)
+
 
 # ==========================================================
 # 13. MODEL PARAMETER DICTIONARIES
@@ -596,6 +658,44 @@ mpc_params = {
 
 }
 
+multimodal_params = {
+
+    "K_light": 30.0,
+    "K_electric": 5.0,
+    "K_ultrasound": 5.0,
+    "K_magnetic": 5.0,
+
+    "hill_opto": 2.0,
+    "hill_electro": 2.0,
+    "hill_sono": 2.0,
+    "hill_magneto": 2.0,
+
+    "tau_opto": tau_opto,
+    "tau_electro": tau_electro,
+    "tau_sono": tau_sono,
+    "tau_magneto": tau_magneto,
+
+    "alpha_m": alpha_m,
+    "delta_m": delta_m,
+    "alpha_e": alpha_e,
+    "delta_e": delta_e,
+
+    "mu_max": mu_max,
+    "K_S": K_S,
+    "K_DO": K_DO,
+    "Y_XS": Y_XS,
+
+    "qP_max": qP_max,
+    "K_E": K_E,
+    "K_SP": K_SP,
+    "K_OP": K_OP,
+    "Y_PS": Y_PS,
+
+    "kla": kla,
+    "oxygen_saturation": oxygen_saturation,
+    "qO2": qO2
+}
+
 
 initial_state = [
 
@@ -693,6 +793,151 @@ if run_simulation:
                 prediction_horizon=prediction_horizon
 
             )
+            # ----------------------------------------------
+            # E. Integrated multi-modal simulation
+            # ----------------------------------------------
+
+            multimodal_time = np.linspace(
+                0,
+                duration,
+                400
+            )
+
+            multimodal_results = simulate_multimodal_bioreactor(
+
+                time=multimodal_time,
+
+                opto_input=np.full(
+                    400,
+                    multimodal_light
+                ),
+
+                electro_input=np.full(
+                    400,
+                    multimodal_electric
+                ),
+
+                sono_input=np.full(
+                    400,
+                    multimodal_ultrasound
+                ),
+
+                magneto_input=np.full(
+                    400,
+                    multimodal_magnetic
+                ),
+
+                params=multimodal_params,
+
+                initial_conditions={
+                    "biomass": initial_biomass,
+                    "substrate": initial_substrate,
+                    "dissolved_oxygen": initial_oxygen,
+                    "product": 0.0,
+                    "mRNA": initial_mRNA,
+                    "enzyme": initial_enzyme
+                }
+
+            )
+
+                        # ----------------------------------------------
+            # F. MULTI-MODAL SCENARIO COMPARISON
+            # ----------------------------------------------
+
+            zero_input = np.zeros(400)
+
+            light_input = np.full(400, multimodal_light)
+
+            electric_input = np.full(400, multimodal_electric)
+
+            ultrasound_input = np.full(400, multimodal_ultrasound)
+
+            magnetic_input = np.full(400, multimodal_magnetic)
+
+            scenario_inputs = {
+
+                "No activation": (
+                    zero_input,
+                    zero_input,
+                    zero_input,
+                    zero_input
+                ),
+
+                "Optogenetics only": (
+                    light_input,
+                    zero_input,
+                    zero_input,
+                    zero_input
+                ),
+
+                "Electrogenetics only": (
+                    zero_input,
+                    electric_input,
+                    zero_input,
+                    zero_input
+                ),
+
+                "Sonogenetics only": (
+                    zero_input,
+                    zero_input,
+                    ultrasound_input,
+                    zero_input
+                ),
+
+                "Magnetogenetics only": (
+                    zero_input,
+                    zero_input,
+                    zero_input,
+                    magnetic_input
+                )
+
+            }
+
+            scenario_results = {}
+
+            common_initial_conditions = {
+
+                "biomass": initial_biomass,
+
+                "substrate": initial_substrate,
+
+                "dissolved_oxygen": initial_oxygen,
+
+                "product": 0.0,
+
+                "mRNA": initial_mRNA,
+
+                "enzyme": initial_enzyme
+
+            }
+
+            for scenario_name, inputs in scenario_inputs.items():
+
+                scenario_results[scenario_name] = (
+                    simulate_multimodal_bioreactor(
+
+                        time=multimodal_time,
+
+                        opto_input=inputs[0],
+
+                        electro_input=inputs[1],
+
+                        sono_input=inputs[2],
+
+                        magneto_input=inputs[3],
+
+                        params=multimodal_params,
+
+                        initial_conditions=common_initial_conditions
+
+                    )
+                )
+
+            # Reuse the already calculated all-four simulation
+
+            scenario_results["All four modalities"] = multimodal_results
+
+
 
         # ----------------------------------------------
         # Save outputs for display and download
@@ -705,6 +950,10 @@ if run_simulation:
         st.session_state["fixed_results"] = fixed_results
 
         st.session_state["mpc_results"] = mpc_results
+
+        st.session_state["multimodal_results"] = multimodal_results
+
+        st.session_state["scenario_results"] = scenario_results
 
         st.session_state["simulation_params"] = {
             "duration": duration,
@@ -747,12 +996,15 @@ fixed = st.session_state["fixed_results"]
 
 mpc = st.session_state["mpc_results"]
 
+multimodal = st.session_state["multimodal_results"]
+
+scenarios = st.session_state["scenario_results"]
 
 # ==========================================================
 # 16. MAIN DASHBOARD TABS
 # ==========================================================
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
     "📊 Bioreactor",
 
@@ -762,7 +1014,9 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
     "🤖 Predictive Control",
 
-    "📁 Research Data"
+    "📁 Research Data",
+
+    "🔬 Multi-Modal Control"
 
 ])
 
@@ -1694,6 +1948,921 @@ with tab5:
 
 
 # ==========================================================
+# TAB 6: MULTI-MODAL PHYSICAL-FIELD CONTROL
+# ==========================================================
+
+with tab6:
+
+    st.header("Multi-Modal Physical-Field Control")
+
+    st.markdown("""
+    This module simulates the combined effects of four physical-field
+    inputs on actuator activation, gene expression, and fermentation.
+
+    The four modalities are:
+
+    - Optogenetics: Light stimulation
+    - Electrogenetics: Electrical-field stimulation
+    - Sonogenetics: Ultrasound stimulation
+    - Magnetogenetics: Magnetic-field stimulation
+    """)
+
+    # ------------------------------------------------------
+    # 1. FINAL PERFORMANCE METRICS
+    # ------------------------------------------------------
+
+    st.subheader("Final Multi-Modal Simulation Results")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "Final biomass",
+        f"{multimodal['biomass'][-1]:.3f} g/L"
+    )
+
+    c2.metric(
+        "Final product",
+        f"{multimodal['product'][-1]:.3f} g/L"
+    )
+
+    c3.metric(
+        "Final mRNA",
+        f"{multimodal['mRNA'][-1]:.3f}"
+    )
+
+    c4.metric(
+        "Final enzyme",
+        f"{multimodal['enzyme'][-1]:.3f}"
+    )
+
+    c5, c6, c7 = st.columns(3)
+
+    c5.metric(
+        "Final dissolved oxygen",
+        f"{multimodal['dissolved_oxygen'][-1]:.5f} g/L"
+    )
+
+    c6.metric(
+        "Final substrate",
+        f"{multimodal['substrate'][-1]:.3f} g/L"
+    )
+
+    c7.metric(
+        "Combined activation",
+        f"{multimodal['total_activation'][-1]:.3f}"
+    )
+
+    st.divider()
+
+    # ------------------------------------------------------
+    # 2. INDIVIDUAL ACTUATOR ACTIVATION
+    # ------------------------------------------------------
+
+    st.subheader("Individual Physical-Field Activation Dynamics")
+
+    activation_fig = go.Figure()
+
+    activation_data = [
+
+        ("Optogenetics", "opto_activation"),
+
+        ("Electrogenetics", "electro_activation"),
+
+        ("Sonogenetics", "sono_activation"),
+
+        ("Magnetogenetics", "magneto_activation")
+
+    ]
+
+    for name, key in activation_data:
+
+        activation_fig.add_trace(
+
+            go.Scatter(
+
+                x=multimodal["time"],
+
+                y=multimodal[key],
+
+                name=name,
+
+                mode="lines",
+
+                line=dict(width=3)
+
+            )
+
+        )
+
+    activation_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=450,
+
+        title="Dynamic Response of the Four Actuators",
+
+        xaxis_title="Time (hours)",
+
+        yaxis_title="Normalized activation",
+
+        yaxis=dict(range=[0, 1.05])
+
+    )
+
+    st.plotly_chart(
+        activation_fig,
+        use_container_width=True
+    )
+
+    st.caption(
+        "Each activation state follows its own first-order response "
+        "dynamics. The response times can be adjusted in the sidebar."
+    )
+
+    # ------------------------------------------------------
+    # 3. COMBINED ACTIVATION
+    # ------------------------------------------------------
+
+    st.subheader("Combined Multi-Modal Activation")
+
+    total_activation_fig = go.Figure()
+
+    total_activation_fig.add_trace(
+
+        go.Scatter(
+
+            x=multimodal["time"],
+
+            y=multimodal["total_activation"],
+
+            name="Combined activation",
+
+            fill="tozeroy",
+
+            line=dict(width=3)
+
+        )
+
+    )
+
+    total_activation_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=350,
+
+        title="Overall Physical-Field Activation",
+
+        xaxis_title="Time (hours)",
+
+        yaxis_title="Combined activation",
+
+        yaxis=dict(range=[0, 1.05])
+
+    )
+
+    st.plotly_chart(
+        total_activation_fig,
+        use_container_width=True
+    )
+
+    st.latex(
+        r"""
+        A_{\mathrm{total}}
+        =
+        1-\prod_{i=1}^{4}(1-A_i)
+        """
+    )
+
+    # ------------------------------------------------------
+    # 4. GENE EXPRESSION DYNAMICS
+    # ------------------------------------------------------
+
+    st.subheader("Multi-Modal Gene Expression Dynamics")
+
+    gene_fig = make_subplots(
+
+        rows=1,
+
+        cols=2,
+
+        subplot_titles=(
+
+            "mRNA production",
+
+            "Enzyme production"
+
+        )
+
+    )
+
+    gene_fig.add_trace(
+
+        go.Scatter(
+
+            x=multimodal["time"],
+
+            y=multimodal["mRNA"],
+
+            name="mRNA",
+
+            line=dict(width=3)
+
+        ),
+
+        row=1,
+
+        col=1
+
+    )
+
+    gene_fig.add_trace(
+
+        go.Scatter(
+
+            x=multimodal["time"],
+
+            y=multimodal["enzyme"],
+
+            name="Enzyme",
+
+            line=dict(width=3)
+
+        ),
+
+        row=1,
+
+        col=2
+
+    )
+
+    gene_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=430,
+
+        showlegend=False
+
+    )
+
+    gene_fig.update_xaxes(
+        title_text="Time (hours)"
+    )
+
+    st.plotly_chart(
+        gene_fig,
+        use_container_width=True
+    )
+
+    st.latex(
+        r"""
+        \frac{dmRNA}{dt}
+        =
+        \alpha_m A_{\mathrm{total}}
+        -
+        \delta_m mRNA
+        """
+    )
+
+    st.latex(
+        r"""
+        \frac{dE}{dt}
+        =
+        \alpha_e mRNA
+        -
+        \delta_e E
+        """
+    )
+
+    # ------------------------------------------------------
+    # 5. FERMENTATION PERFORMANCE
+    # ------------------------------------------------------
+
+    st.subheader("Multi-Modal Fermentation Performance")
+
+    fermentation_fig = make_subplots(
+
+        rows=2,
+
+        cols=2,
+
+        subplot_titles=(
+
+            "Biomass growth",
+
+            "Substrate consumption",
+
+            "Product formation",
+
+            "Dissolved oxygen"
+
+        )
+
+    )
+
+    fermentation_variables = [
+
+        ("Biomass", "biomass", 1, 1),
+
+        ("Substrate", "substrate", 1, 2),
+
+        ("Product", "product", 2, 1),
+
+        ("Dissolved oxygen", "dissolved_oxygen", 2, 2)
+
+    ]
+
+    for name, key, row, col in fermentation_variables:
+
+        fermentation_fig.add_trace(
+
+            go.Scatter(
+
+                x=multimodal["time"],
+
+                y=multimodal[key],
+
+                name=name,
+
+                line=dict(width=3)
+
+            ),
+
+            row=row,
+
+            col=col
+
+        )
+
+    fermentation_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=650,
+
+        showlegend=False
+
+    )
+
+    fermentation_fig.update_xaxes(
+        title_text="Time (hours)"
+    )
+
+    st.plotly_chart(
+        fermentation_fig,
+        use_container_width=True
+    )
+
+    # ------------------------------------------------------
+    # 6. MULTI-MODAL INPUT CONFIGURATION
+    # ------------------------------------------------------
+
+    st.subheader("Applied Physical-Field Inputs")
+
+    field_summary = pd.DataFrame({
+
+        "Modality": [
+
+            "Optogenetics",
+
+            "Electrogenetics",
+
+            "Sonogenetics",
+
+            "Magnetogenetics"
+
+        ],
+
+        "Applied input": [
+
+            multimodal_light,
+
+            multimodal_electric,
+
+            multimodal_ultrasound,
+
+            multimodal_magnetic
+
+        ],
+
+        "Response time (h)": [
+
+            tau_opto,
+
+            tau_electro,
+
+            tau_sono,
+
+            tau_magneto
+
+        ]
+
+    })
+
+    st.dataframe(
+
+        field_summary,
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    # ------------------------------------------------------
+    # 7. MULTI-MODAL RESULTS DATA
+    # ------------------------------------------------------
+
+    st.subheader("Multi-Modal Simulation Dataset")
+
+    multimodal_df = pd.DataFrame({
+
+        "Time (h)": multimodal["time"],
+
+        "Optogenetic activation": multimodal["opto_activation"],
+
+        "Electrogenetic activation": multimodal["electro_activation"],
+
+        "Sonogenetic activation": multimodal["sono_activation"],
+
+        "Magnetogenetic activation": multimodal["magneto_activation"],
+
+        "Combined activation": multimodal["total_activation"],
+
+        "mRNA": multimodal["mRNA"],
+
+        "Enzyme": multimodal["enzyme"],
+
+        "Biomass (g/L)": multimodal["biomass"],
+
+        "Substrate (g/L)": multimodal["substrate"],
+
+        "Dissolved oxygen (g/L)": multimodal["dissolved_oxygen"],
+
+        "Product (g/L)": multimodal["product"]
+
+    })
+
+    st.dataframe(
+
+        multimodal_df.head(15),
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    st.download_button(
+
+        "⬇️ Download Multi-Modal Simulation CSV",
+
+        multimodal_df.to_csv(index=False).encode("utf-8"),
+
+        file_name="multimodal_bioreactor_results.csv",
+
+        mime="text/csv",
+
+        key="download_multimodal_results"
+
+    )
+
+    # ------------------------------------------------------
+    # 8. SCIENTIFIC INTERPRETATION
+    # ------------------------------------------------------
+
+    st.info("""
+    **Scientific interpretation**
+
+    The four actuator models generate individual activation states.
+    These states are combined using a proposed phenomenological
+    activation equation.
+
+    Combined activation drives mRNA production, followed by enzyme
+    production. The enzyme-dependent metabolic model then determines
+    product formation.
+
+    The simulation represents a computational hypothesis. It does
+    not establish experimentally validated biological synergy,
+    actuator orthogonality, or industrial performance.
+    """)
+
+
+    # ======================================================
+    # 9. SIX-SCENARIO PERFORMANCE COMPARISON
+    # ======================================================
+
+    st.divider()
+
+    st.header("Six-Scenario Performance Comparison")
+
+    st.markdown("""
+    Compare fermentation performance under individual physical-field
+    stimulation and combined multi-modal stimulation.
+    """)
+
+    scenario_names = list(scenarios.keys())
+
+    comparison_df = pd.DataFrame({
+
+        "Scenario": scenario_names,
+
+        "Final Biomass (g/L)": [
+            scenarios[name]["biomass"][-1]
+            for name in scenario_names
+        ],
+
+        "Final Product (g/L)": [
+            scenarios[name]["product"][-1]
+            for name in scenario_names
+        ],
+
+        "Final Enzyme": [
+            scenarios[name]["enzyme"][-1]
+            for name in scenario_names
+        ],
+
+        "Final mRNA": [
+            scenarios[name]["mRNA"][-1]
+            for name in scenario_names
+        ],
+
+        "Final Activation": [
+            scenarios[name]["total_activation"][-1]
+            for name in scenario_names
+        ]
+
+    })
+
+    st.dataframe(
+
+        comparison_df.style.format({
+
+            "Final Biomass (g/L)": "{:.4f}",
+
+            "Final Product (g/L)": "{:.4f}",
+
+            "Final Enzyme": "{:.4f}",
+
+            "Final mRNA": "{:.4f}",
+
+            "Final Activation": "{:.4f}"
+
+        }),
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+        # ======================================================
+    # 10. PRODUCT FORMATION COMPARISON
+    # ======================================================
+
+    st.subheader("Product Formation Across Six Scenarios")
+
+    product_comparison_fig = go.Figure()
+
+    for name in scenario_names:
+
+        result = scenarios[name]
+
+        product_comparison_fig.add_trace(
+
+            go.Scatter(
+
+                x=result["time"],
+
+                y=result["product"],
+
+                name=name,
+
+                mode="lines",
+
+                line=dict(width=3)
+
+            )
+
+        )
+
+    product_comparison_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=480,
+
+        xaxis_title="Time (hours)",
+
+        yaxis_title="Product concentration (g/L)",
+
+        title="Product Formation Under Different Physical-Field Strategies"
+
+    )
+
+    st.plotly_chart(
+
+        product_comparison_fig,
+
+        use_container_width=True
+
+    )
+
+
+        # ======================================================
+    # 11. FINAL PRODUCT COMPARISON
+    # ======================================================
+
+    st.subheader("Final Product Concentration")
+
+    product_bar = go.Figure()
+
+    product_bar.add_trace(
+
+        go.Bar(
+
+            x=comparison_df["Scenario"],
+
+            y=comparison_df["Final Product (g/L)"],
+
+            text=comparison_df["Final Product (g/L)"].round(4),
+
+            textposition="outside"
+
+        )
+
+    )
+
+    product_bar.update_layout(
+
+        template="plotly_dark",
+
+        height=450,
+
+        xaxis_title="Physical-field strategy",
+
+        yaxis_title="Final product concentration (g/L)",
+
+        title="Final Product Yield Comparison"
+
+    )
+
+    st.plotly_chart(
+
+        product_bar,
+
+        use_container_width=True
+
+    )
+
+        # ======================================================
+    # 12. ENZYME PRODUCTION COMPARISON
+    # ======================================================
+
+    st.subheader("Enzyme Production Across Scenarios")
+
+    enzyme_comparison_fig = go.Figure()
+
+    for name in scenario_names:
+
+        result = scenarios[name]
+
+        enzyme_comparison_fig.add_trace(
+
+            go.Scatter(
+
+                x=result["time"],
+
+                y=result["enzyme"],
+
+                name=name,
+
+                mode="lines",
+
+                line=dict(width=3)
+
+            )
+
+        )
+
+    enzyme_comparison_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=450,
+
+        xaxis_title="Time (hours)",
+
+        yaxis_title="Enzyme (model units)",
+
+        title="Enzyme Expression Under Different Stimulation Strategies"
+
+    )
+
+    st.plotly_chart(
+
+        enzyme_comparison_fig,
+
+        use_container_width=True
+
+    )
+
+        # ======================================================
+    # 13. PRODUCT IMPROVEMENT ANALYSIS
+    # ======================================================
+
+    st.subheader("Product Improvement Relative to Baseline")
+
+    baseline_product = scenarios["No activation"]["product"][-1]
+
+    improvement_values = []
+
+    for name in scenario_names:
+
+        final_product = scenarios[name]["product"][-1]
+
+        improvement = (
+
+            (final_product - baseline_product)
+
+            / max(abs(baseline_product), 1e-12)
+
+        ) * 100
+
+        improvement_values.append(improvement)
+
+    improvement_df = pd.DataFrame({
+
+        "Scenario": scenario_names,
+
+        "Final Product (g/L)": [
+
+            scenarios[name]["product"][-1]
+
+            for name in scenario_names
+
+        ],
+
+        "Improvement vs Baseline (%)": improvement_values
+
+    })
+
+    st.dataframe(
+
+        improvement_df.style.format({
+
+            "Final Product (g/L)": "{:.5f}",
+
+            "Improvement vs Baseline (%)": "{:+.2f}%"
+
+        }),
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    improvement_fig = go.Figure()
+
+    improvement_fig.add_trace(
+
+        go.Bar(
+
+            x=improvement_df["Scenario"],
+
+            y=improvement_df["Improvement vs Baseline (%)"],
+
+            text=improvement_df["Improvement vs Baseline (%)"].round(2),
+
+            textposition="outside"
+
+        )
+
+    )
+
+    improvement_fig.update_layout(
+
+        template="plotly_dark",
+
+        height=450,
+
+        xaxis_title="Physical-field strategy",
+
+        yaxis_title="Product improvement (%)",
+
+        title="Relative Improvement Compared with No Activation"
+
+    )
+
+    st.plotly_chart(
+
+        improvement_fig,
+
+        use_container_width=True
+
+    )
+
+        # ======================================================
+    # 14. COMBINED RESPONSE VS ADDITIVE REFERENCE
+    # ======================================================
+
+    st.subheader("Combined Response vs Additive Reference")
+
+    individual_scenarios = [
+
+        "Optogenetics only",
+
+        "Electrogenetics only",
+
+        "Sonogenetics only",
+
+        "Magnetogenetics only"
+
+    ]
+
+    additive_product = baseline_product
+
+    for name in individual_scenarios:
+
+        additive_product += (
+
+            scenarios[name]["product"][-1]
+
+            - baseline_product
+
+        )
+
+    combined_product = scenarios["All four modalities"]["product"][-1]
+
+    difference = combined_product - additive_product
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+
+        "Additive reference",
+
+        f"{additive_product:.4f} g/L"
+
+    )
+
+    c2.metric(
+
+        "Simulated combined product",
+
+        f"{combined_product:.4f} g/L"
+
+    )
+
+    c3.metric(
+
+        "Difference from reference",
+
+        f"{difference:+.4f} g/L"
+
+    )
+
+    st.info("""
+    The additive reference is a mathematical comparison constructed
+    from the four single-modality simulations.
+
+    A positive difference indicates that the combined model prediction
+    exceeds this reference. A negative difference indicates that it
+    falls below the reference.
+
+    This comparison does not establish biological synergy or antagonism.
+    The result depends on the assumed actuator response functions,
+    combined-activation equation, and downstream metabolic model.
+    """)
+
+        # ======================================================
+    # 15. EXPORT SIX-SCENARIO DATA
+    # ======================================================
+
+    st.subheader("Export Scenario Comparison Data")
+
+    st.download_button(
+
+        "⬇️ Download six-scenario comparison CSV",
+
+        comparison_df.to_csv(index=False).encode("utf-8"),
+
+        file_name="multimodal_scenario_comparison.csv",
+
+        mime="text/csv",
+
+        key="download_scenario_comparison"
+
+    )
+
+
+
+    
+
+# ==========================================================
 # 17. SCIENTIFIC SCOPE AND LIMITATIONS
 # ==========================================================
 
@@ -1701,6 +2870,7 @@ st.divider()
 
 with st.expander("Model equations and scientific assumptions"):
 
+    # 1. Biomass Growth
     st.subheader("1. Biomass Growth")
 
     st.latex(r"""
@@ -1708,9 +2878,11 @@ with st.expander("Model equations and scientific assumptions"):
     =
     \mu_{\max}
     \frac{S}{K_S+S}
-    \frac{DO}{K_{DO}+DO}X
+    \frac{DO}{K_{DO}+DO}
+    X
     """)
 
+    # 2. Gene Expression
     st.subheader("2. Gene Expression")
 
     st.latex(r"""
@@ -1725,13 +2897,112 @@ with st.expander("Model equations and scientific assumptions"):
     \alpha_e mRNA_i-\delta_e E_i
     """)
 
-    st.subheader("3. Optical Attenuation")
+    # 3. Optical Attenuation
+    st.subheader("3. Optogenetics - Optical Attenuation")
 
     st.latex(r"""
     I_i(t)=I_0 e^{-\kappa z_i(t)}
     """)
 
-    st.subheader("4. Product Formation")
+    # 4. Electrogenetics
+    st.subheader("4. Electrogenetics - Electrical Field Activation")
+
+    st.latex(r"""
+    A_{\mathrm{elec}}(t)
+    =
+    \frac{\mathcal{E}(t)^n}
+    {K_{\mathcal{E}}^n+\mathcal{E}(t)^n}
+    """)
+
+    st.markdown("""
+    **Parameters:**
+
+    - `E(t)`: Applied electrical-field magnitude (V/m).
+    - `K_E`: Half-activation electrical-field magnitude.
+    - `n`: Hill coefficient.
+    - `A_elec`: Normalized electrical activation.
+    """)
+
+    # 5. Magnetogenetics
+    st.subheader("5. Magnetogenetics - Magnetic Field Activation")
+
+    st.latex(r"""
+    A_{\mathrm{mag}}(t)
+    =
+    \frac{B(t)^n}
+    {K_B^n+B(t)^n}
+    """)
+
+    st.markdown("""
+    **Parameters:**
+
+    - `B(t)`: Magnetic-field magnitude (T).
+    - `K_B`: Half-activation magnetic-field magnitude.
+    - `n`: Hill coefficient.
+    - `A_mag`: Normalized magnetic activation.
+    """)
+
+    # 6. Sonogenetics
+    st.subheader("6. Sonogenetics - Ultrasound Activation")
+
+    st.latex(r"""
+    A_{\mathrm{sono}}(t)
+    =
+    \frac{I_{\mathrm{US}}(t)^n}
+    {K_{\mathrm{US}}^n+I_{\mathrm{US}}(t)^n}
+    """)
+
+    st.markdown("""
+    **Parameters:**
+
+    - `I_US`: Ultrasound intensity (W/m²).
+    - `K_US`: Half-activation ultrasound intensity.
+    - `n`: Hill coefficient.
+    - `A_sono`: Normalized ultrasound activation.
+    """)
+
+    # 7. Combined Physical-Field Activation
+    st.subheader("7. Combined Physical-Field Activation")
+
+    st.latex(r"""
+    A_{\mathrm{total}}
+    =
+    1-
+    (1-A_{\mathrm{opto}})
+    (1-A_{\mathrm{elec}})
+    (1-A_{\mathrm{mag}})
+    (1-A_{\mathrm{sono}})
+    """)
+
+    st.markdown("""
+    This is a proposed phenomenological combination rule.
+
+    It assumes independent contributions to normalized activation.
+    It does not establish biological synergy or prove that the
+    physical-field responses are independent.
+    """)
+
+    # 8. Multi-Modal Gene Expression
+    st.subheader("8. Multi-Modal Gene Expression Dynamics")
+
+    st.latex(r"""
+    \frac{dmRNA}{dt}
+    =
+    \alpha_m A_{\mathrm{total}}
+    -
+    \delta_m mRNA
+    """)
+
+    st.latex(r"""
+    \frac{dE}{dt}
+    =
+    \alpha_e mRNA
+    -
+    \delta_e E
+    """)
+
+    # 9. Product Formation
+    st.subheader("9. Product Formation")
 
     st.latex(r"""
     \frac{dP}{dt}
@@ -1739,19 +3010,27 @@ with st.expander("Model equations and scientific assumptions"):
     X\overline{q_P}
     """)
 
-    st.subheader("5. Oxygen Balance")
+    # 10. Oxygen Balance
+    st.subheader("10. Oxygen Balance")
 
     st.latex(r"""
     \frac{dDO}{dt}
     =
-    k_La(C^*-DO)-q_{O_2}Xf_{O_2}
+    k_La(C^*-DO)
+    -
+    q_{O_2}Xf_{O_2}
     """)
 
+    # Scientific scope
+    st.markdown("---")
 
     st.markdown("""
-    **Current implementation**
+    **Currently implemented**
 
-    - Population-level optogenetic activation.
+    - Population-level optogenetic simulation.
+    - Integrated multi-modal electrical, ultrasound, magnetic,
+    and optical actuator dynamics.
+    - Coupled multi-modal gene-expression and fermentation model.
     - Individual-cell mRNA and enzyme dynamics.
     - Shared batch-fermentation environment.
     - Monod-based biomass growth.
@@ -1761,13 +3040,14 @@ with st.expander("Model equations and scientific assumptions"):
 
     **Not yet fully implemented**
 
-    - Electrogenetic dynamic actuator model.
-    - Sonogenetic dynamic actuator model.
-    - Magnetogenetic dynamic actuator model.
+    - Dynamic electrical-field actuator model.
+    - Dynamic magnetic-field actuator model.
+    - Dynamic ultrasound actuator model.
     - Experimental calibration and validation.
-    - CFD-derived spatial mixing.
+    - CFD-derived spatial mixing and field distributions.
     - Mechanistic metabolic network.
     - Hardware-connected sensor feedback.
+    - Experimentally established interactions between modalities.
 
     **Important:** The MPC model uses average mRNA and enzyme states.
     It is an approximation of the individual-cell population model.
